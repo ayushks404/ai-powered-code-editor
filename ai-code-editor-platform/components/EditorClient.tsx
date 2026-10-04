@@ -1,12 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import { SUPPORTED_LANGUAGES, detectLanguageFromFilename } from '@/lib/languages';
 import { Finding, ReviewState, TokenUsage } from '@/lib/types';
+import { calculateCost } from '@/lib/pricing';
 import AIPanel from '@/components/panel/ai-panel';
 
-const CodeEditor = dynamic(() => import('@/components/CodeEditor'), {
+const CodeEditor = dynamic(() => import('@/components/editor/code-editor'), {
   ssr: false,
   loading: () => (
     <div className="flex h-full items-center justify-center bg-[#1e1e1e] text-zinc-400 text-sm font-mono">
@@ -72,11 +73,21 @@ export default function EditorClient() {
 
   const handleRunReview = () => {
     setReviewState('analyzing');
-    // M1 step: Simulate trigger placeholder state - M4 will connect WebSocket stream
     setTimeout(() => {
       setReviewState('idle');
     }, 1200);
   };
+
+  const handleUsage = useCallback((inputTokens: number, outputTokens: number) => {
+    const cost = calculateCost(inputTokens, outputTokens, 'completion');
+    setTokenUsage((prev) => ({
+      ...prev,
+      inputTokens: prev.inputTokens + inputTokens,
+      outputTokens: prev.outputTokens + outputTokens,
+      totalCost: prev.totalCost + cost,
+      completionCalls: prev.completionCalls + 1,
+    }));
+  }, []);
 
   return (
     <div className="flex flex-col h-full bg-[#1e1e1e] text-zinc-200 font-sans select-none">
@@ -175,6 +186,7 @@ export default function EditorClient() {
             language={selectedLanguage}
             value={code}
             onChange={(val) => setCode(val ?? '')}
+            onUsage={handleUsage}
           />
         </div>
 
