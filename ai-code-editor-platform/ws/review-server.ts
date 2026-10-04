@@ -104,6 +104,7 @@ export function handleReviewConnection(ws: WebSocket) {
         body: JSON.stringify({
           model: modelName,
           max_tokens: 2048,
+          stream: true,
           system: REVIEW_SYSTEM_PROMPT,
           messages: [
             {
@@ -120,20 +121,23 @@ export function handleReviewConnection(ws: WebSocket) {
         throw new Error(`LLMsRelay Error (${response.status}): ${errorText}`);
       }
 
-      const data = await response.json();
-      console.log('[WebSocket] LLMsRelay response received successfully');
+      if (!response.body) {
+        throw new Error('Response body is empty');
+      }
 
-      // Extract text content
-      const contentBlock = data.content?.[0];
-      const fullText = contentBlock?.text || '';
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let sseBuffer = '';
+      let lineBuffer = '';
+      let fullText = '';
+      let inputTokens = Math.ceil(msg.code.length / 4);
+      let outputTokens = 0;
 
-      // Parse JSONL line-by-line
-      const lines = fullText.split('\n');
-      for (const rawLine of lines) {
+      const processLine = (rawLine: string) => {
         const line = rawLine.trim();
-        if (!line) continue;
+        if (!line) return;
         const cleaned = line.replace(/^```jsonl?/, '').replace(/```$/, '').trim();
-        if (!cleaned) continue;
+        if (!cleaned || cleaned.startsWith('//') || cleaned.startsWith('#')) return;
 
         try {
           const parsed = JSON.parse(cleaned);
@@ -152,13 +156,57 @@ export function handleReviewConnection(ws: WebSocket) {
           };
           send(ws, { type: 'finding', finding });
         } catch {
-          // Non-JSON line ignored
+          // Incomplete or non-JSON line ignored
+        }
+      };
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        sseBuffer += decoder.decode(value, { stream: true });
+        const sseLines = sseBuffer.split('\n');
+        sseBuffer = sseLines.pop() || '';
+
+        for (const line of sseLines) {
+          if (line.startsWith('data: ')) {
+            const dataStr = line.slice(6).trim();
+            if (!dataStr || dataStr === '[DONE]') continue;
+
+            try {
+              const sse = JSON.parse(dataStr);
+              if (sse.type === 'content_block_delta' && sse.delta?.type === 'text_delta') {
+                const text = sse.delta.text || '';
+                fullText += text;
+                lineBuffer += text;
+
+                let newlineIdx: number;
+                while ((newlineIdx = lineBuffer.indexOf('\n')) !== -1) {
+                  const completedLine = lineBuffer.slice(0, newlineIdx);
+                  lineBuffer = lineBuffer.slice(newlineIdx + 1);
+                  processLine(completedLine);
+                }
+              } else if (sse.type === 'message_delta' && sse.usage?.output_tokens) {
+                outputTokens = sse.usage.output_tokens;
+              } else if (sse.type === 'message_start' && sse.message?.usage?.input_tokens) {
+                inputTokens = sse.message.usage.input_tokens;
+              }
+            } catch {
+              // Ignore partial SSE chunk parse error
+            }
+          }
         }
       }
 
-      // Send usage
-      const inputTokens = data.usage?.input_tokens || Math.ceil(msg.code.length / 4);
-      const outputTokens = data.usage?.output_tokens || Math.ceil(fullText.length / 4);
+      // Process any trailing line left in lineBuffer
+      if (lineBuffer.trim()) {
+        processLine(lineBuffer);
+      }
+
+      if (!outputTokens) {
+        outputTokens = Math.ceil(fullText.length / 4);
+      }
+
       send(ws, {
         type: 'usage',
         usage: { inputTokens, outputTokens, source: 'review' },
