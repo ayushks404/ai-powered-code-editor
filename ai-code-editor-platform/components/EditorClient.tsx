@@ -1,11 +1,14 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import dynamic from 'next/dynamic';
+import type * as monaco from 'monaco-editor';
 import { SUPPORTED_LANGUAGES, detectLanguageFromFilename } from '@/lib/languages';
-import { Finding, ReviewState, TokenUsage } from '@/lib/types';
+import { Finding, ReviewState, TokenUsage, WSServerMessage } from '@/lib/types';
 import { calculateCost } from '@/lib/pricing';
+import { useReviewWebSocket } from '@/lib/use-websocket';
 import AIPanel from '@/components/panel/ai-panel';
+import DiffViewModal from '@/components/editor/diff-view-modal';
 
 const CodeEditor = dynamic(() => import('@/components/editor/code-editor'), {
   ssr: false,
@@ -26,6 +29,7 @@ export default function EditorClient() {
   const [isPanelCollapsed, setIsPanelCollapsed] = useState(false);
   const [findings, setFindings] = useState<Finding[]>([]);
   const [reviewState, setReviewState] = useState<ReviewState>('idle');
+  const [activeDiffFinding, setActiveDiffFinding] = useState<Finding | null>(null);
   const [tokenUsage, setTokenUsage] = useState<TokenUsage>({
     inputTokens: 0,
     outputTokens: 0,
@@ -34,7 +38,38 @@ export default function EditorClient() {
     reviewCalls: 0,
   });
 
-  const activeLangOption = SUPPORTED_LANGUAGES.find((l) => l.id === selectedLanguage) || SUPPORTED_LANGUAGES[0];
+  const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
+  const reviewTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const activeLangOption =
+    SUPPORTED_LANGUAGES.find((l) => l.id === selectedLanguage) || SUPPORTED_LANGUAGES[0];
+
+  // WebSocket message handler
+  const handleWSMessage = useCallback((msg: WSServerMessage) => {
+    if (reviewTimeoutRef.current) {
+      clearTimeout(reviewTimeoutRef.current);
+      reviewTimeoutRef.current = null;
+    }
+
+    if (msg.type === 'finding') {
+      setFindings((prev) => [...prev, msg.finding]);
+    } else if (msg.type === 'usage') {
+      const cost = calculateCost(msg.usage.inputTokens, msg.usage.outputTokens, 'review');
+      setTokenUsage((prev) => ({
+        ...prev,
+        inputTokens: prev.inputTokens + msg.usage.inputTokens,
+        outputTokens: prev.outputTokens + msg.usage.outputTokens,
+        totalCost: prev.totalCost + cost,
+        reviewCalls: prev.reviewCalls + 1,
+      }));
+    } else if (msg.type === 'done') {
+      setReviewState('completed');
+    } else if (msg.type === 'error') {
+      setReviewState('error');
+      console.error('[Review WebSocket] Error message received:', msg.message);
+    }
+  }, []);
+
+  const { connected, sendReview } = useReviewWebSocket(handleWSMessage);
 
   const handleFilenameChange = (newFilename: string) => {
     setFilename(newFilename);
@@ -65,18 +100,133 @@ export default function EditorClient() {
     }
   };
 
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const handleOpenLocalFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const content = event.target?.result as string;
+      if (content !== undefined) {
+        setCode(content);
+        setFilename(file.name);
+        const detected = detectLanguageFromFilename(file.name);
+        if (detected !== 'plaintext') {
+          setSelectedLanguage(detected);
+          setIsManualOverride(false);
+        }
+        setFindings([]);
+      }
+    };
+    reader.readAsText(file);
+    // Reset input so same file can be reloaded if needed
+    e.target.value = '';
+  };
+
   const handleLoadSample = () => {
     if (activeLangOption) {
       setCode(activeLangOption.sampleCode);
     }
   };
 
-  const handleRunReview = () => {
+  const handleRunReview = useCallback(() => {
     setReviewState('analyzing');
-    setTimeout(() => {
-      setReviewState('idle');
-    }, 1200);
-  };
+    setFindings([]);
+
+    // Safety timeout: reset state after 15s if server doesn't respond
+    if (reviewTimeoutRef.current) {
+      clearTimeout(reviewTimeoutRef.current);
+    }
+    reviewTimeoutRef.current = setTimeout(() => {
+      setReviewState((current) => (current === 'analyzing' ? 'idle' : current));
+    }, 15000);
+
+    // Check if user has an active text selection
+    let reviewCode = code;
+    let reviewRange = {
+      startLineNumber: 1,
+      startColumn: 1,
+      endLineNumber: code.split('\n').length,
+      endColumn: 1,
+    };
+
+    if (editorRef.current) {
+      const selection = editorRef.current.getSelection();
+      const model = editorRef.current.getModel();
+      if (selection && model && !selection.isEmpty()) {
+        const selectedText = model.getValueInRange(selection);
+        if (selectedText.trim().length > 0) {
+          reviewCode = selectedText;
+          reviewRange = {
+            startLineNumber: selection.startLineNumber,
+            startColumn: selection.startColumn,
+            endLineNumber: selection.endLineNumber,
+            endColumn: selection.endColumn,
+          };
+        }
+      }
+    }
+
+    sendReview({
+      type: 'review',
+      code: reviewCode,
+      language: selectedLanguage,
+      range: reviewRange,
+    });
+  }, [code, selectedLanguage, sendReview]);
+
+  const handleSelectFinding = useCallback((finding: Finding) => {
+    if (editorRef.current) {
+      editorRef.current.revealLineInCenter(finding.range.startLineNumber);
+      editorRef.current.setSelection({
+        startLineNumber: finding.range.startLineNumber,
+        startColumn: finding.range.startColumn,
+        endLineNumber: finding.range.endLineNumber,
+        endColumn: finding.range.endColumn,
+      });
+      editorRef.current.focus();
+    }
+  }, []);
+
+  const handleViewFix = useCallback((finding: Finding) => {
+    setActiveDiffFinding(finding);
+  }, []);
+
+  const handleAcceptFix = useCallback((finding: Finding) => {
+    if (!editorRef.current || !finding.suggestedFix) return;
+
+    const newText =
+      typeof finding.suggestedFix === 'object'
+        ? finding.suggestedFix.newCode
+        : finding.suggestedFix;
+
+    // Apply fix atomically via Monaco executeEdits API
+    editorRef.current.executeEdits('ai-fix', [
+      {
+        range: {
+          startLineNumber: finding.range.startLineNumber,
+          startColumn: finding.range.startColumn,
+          endLineNumber: finding.range.endLineNumber,
+          endColumn: finding.range.endColumn,
+        },
+        text: newText,
+        forceMoveMarkers: true,
+      },
+    ]);
+
+    // Synchronize React code state
+    const updatedValue = editorRef.current.getValue();
+    setCode(updatedValue);
+
+    // Remove resolved finding from state
+    setFindings((prev) => prev.filter((f) => f.id !== finding.id));
+
+    // Close diff view modal
+    setActiveDiffFinding(null);
+    editorRef.current.focus();
+  }, []);
 
   const handleUsage = useCallback((inputTokens: number, outputTokens: number) => {
     const cost = calculateCost(inputTokens, outputTokens, 'completion');
@@ -88,6 +238,19 @@ export default function EditorClient() {
       completionCalls: prev.completionCalls + 1,
     }));
   }, []);
+
+  // Compute current code snippet for active diff finding
+  const getCurrentDiffCode = () => {
+    if (!activeDiffFinding || !editorRef.current) return '';
+    const model = editorRef.current.getModel();
+    if (!model) return '';
+    return model.getValueInRange({
+      startLineNumber: activeDiffFinding.range.startLineNumber,
+      startColumn: activeDiffFinding.range.startColumn,
+      endLineNumber: activeDiffFinding.range.endLineNumber,
+      endColumn: activeDiffFinding.range.endColumn,
+    });
+  };
 
   return (
     <div className="flex flex-col h-full bg-[#1e1e1e] text-zinc-200 font-sans select-none">
@@ -150,6 +313,24 @@ export default function EditorClient() {
             ))}
           </select>
 
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleOpenLocalFile}
+            className="hidden"
+          />
+
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="px-2.5 py-1 bg-[#323233] hover:bg-[#3c3c3c] text-zinc-300 border border-[#454545] rounded transition-colors text-xs flex items-center gap-1.5"
+            title="Open and review a file from your computer"
+          >
+            <svg className="w-3.5 h-3.5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+            </svg>
+            Open File
+          </button>
+
           <button
             onClick={handleLoadSample}
             className="px-2.5 py-1 bg-[#323233] hover:bg-[#3c3c3c] text-zinc-300 border border-[#454545] rounded transition-colors text-xs flex items-center gap-1.5"
@@ -185,6 +366,8 @@ export default function EditorClient() {
           <CodeEditor
             language={selectedLanguage}
             value={code}
+            findings={findings}
+            editorRef={editorRef}
             onChange={(val) => setCode(val ?? '')}
             onUsage={handleUsage}
           />
@@ -196,6 +379,8 @@ export default function EditorClient() {
           reviewState={reviewState}
           tokenUsage={tokenUsage}
           onRunReview={handleRunReview}
+          onSelectFinding={handleSelectFinding}
+          onViewFix={handleViewFix}
           isCollapsed={isPanelCollapsed}
           onToggleCollapse={() => setIsPanelCollapsed(!isPanelCollapsed)}
         />
@@ -205,8 +390,8 @@ export default function EditorClient() {
       <footer className="flex items-center justify-between px-3 h-6 bg-[#007acc] text-white text-[11px] font-mono shrink-0 select-none">
         <div className="flex items-center gap-4">
           <span className="flex items-center gap-1">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-            Monaco Ready
+            <span className={`w-1.5 h-1.5 rounded-full ${connected ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+            {connected ? 'WebSocket Connected' : 'Connecting WS...'}
           </span>
           <span>File: {filename}</span>
         </div>
@@ -216,6 +401,17 @@ export default function EditorClient() {
           <span>Spaces: 2</span>
         </div>
       </footer>
+
+      {/* Diff View Modal (M5) */}
+      {activeDiffFinding && (
+        <DiffViewModal
+          finding={activeDiffFinding}
+          currentCode={getCurrentDiffCode()}
+          language={selectedLanguage}
+          onAccept={handleAcceptFix}
+          onClose={() => setActiveDiffFinding(null)}
+        />
+      )}
     </div>
   );
 }

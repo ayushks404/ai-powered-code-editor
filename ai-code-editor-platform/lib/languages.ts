@@ -61,7 +61,7 @@ if __name__ == "__main__":
   {
     id: 'javascript',
     name: 'JavaScript',
-    extensions: ['.js', '.jsx', '.mjs'],
+    extensions: ['.js', '.jsx', '.mjs', '.cjs'],
     defaultFilename: 'script.js',
     sampleCode: `// JavaScript Syntax Highlighting Demo
 class EventEmitter {
@@ -88,6 +88,37 @@ emitter.emit('data', { status: 'success', code: 200 });
 `,
   },
   {
+    id: 'rust',
+    name: 'Rust',
+    extensions: ['.rs'],
+    defaultFilename: 'main.rs',
+    sampleCode: `// Rust Syntax Highlighting Demo
+fn main() {
+    let numbers = vec![1, 2, 3, 4, 5];
+    let sum: i32 = numbers.iter().sum();
+    println!("Total sum: {}", sum);
+}
+`,
+  },
+  {
+    id: 'go',
+    name: 'Go',
+    extensions: ['.go'],
+    defaultFilename: 'main.go',
+    sampleCode: `// Go Syntax Highlighting Demo
+package main
+
+import "fmt"
+
+func main() {
+    messages := []string{"Hello", "from", "Go"}
+    for _, msg := range messages {
+        fmt.Println(msg)
+    }
+}
+`,
+  },
+  {
     id: 'json',
     name: 'JSON',
     extensions: ['.json'],
@@ -98,13 +129,7 @@ emitter.emit('data', { status: 'success', code: 200 });
   "version": "1.0.0",
   "features": {
     "syntaxHighlighting": true,
-    "languageDetection": true,
-    "supportedLanguages": ["typescript", "python", "javascript", "json", "html", "css"]
-  },
-  "settings": {
-    "theme": "vs-dark",
-    "fontSize": 14,
-    "tabSize": 2
+    "languageDetection": true
   }
 }
 `,
@@ -118,18 +143,10 @@ emitter.emit('data', { status: 'success', code: 200 });
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Monaco Editor - HTML Preview</title>
-  <style>
-    body { font-family: system-ui, sans-serif; background: #121212; color: #fff; margin: 2rem; }
-    .card { background: #1e1e1e; padding: 1.5rem; border-radius: 8px; border: 1px solid #333; }
-  </style>
+  <title>AI Code Editor</title>
 </head>
 <body>
-  <div class="card">
-    <h1>AI Code Editor Platform</h1>
-    <p>Real-time syntax highlighting for HTML5, CSS, and JS.</p>
-  </div>
+  <h1>AI Code Editor Platform</h1>
 </body>
 </html>
 `,
@@ -137,64 +154,71 @@ emitter.emit('data', { status: 'success', code: 200 });
   {
     id: 'css',
     name: 'CSS',
-    extensions: ['.css'],
+    extensions: ['.css', '.scss', '.less'],
     defaultFilename: 'styles.css',
     sampleCode: `/* CSS Syntax Highlighting Demo */
 :root {
-  --primary-color: #3b82f6;
+  --primary: #3b82f6;
   --bg-dark: #1e1e1e;
-  --border-color: #374151;
 }
 
-.editor-container {
+.container {
   display: flex;
-  flex-direction: column;
   height: 100vh;
-  background-color: var(--bg-dark);
-}
-
-.editor-header {
-  height: 40px;
-  border-bottom: 1px solid var(--border-color);
-  transition: all 0.3s ease-in-out;
 }
 `,
   },
   {
     id: 'cpp',
     name: 'C++',
-    extensions: ['.cpp', '.cc', '.h', '.hpp'],
+    extensions: ['.cpp', '.cc', '.h', '.hpp', '.c'],
     defaultFilename: 'main.cpp',
     sampleCode: `// C++ Syntax Highlighting Demo
 #include <iostream>
 #include <vector>
-#include <algorithm>
-
-template <typename T>
-void printVector(const std::vector<T>& vec) {
-    std::cout << "[ ";
-    for (const auto& item : vec) {
-        std::cout << item << " ";
-    }
-    std::cout << "]" << std::endl;
-}
 
 int main() {
-    std::vector<int> numbers = {5, 2, 8, 1, 9};
-    std::sort(numbers.begin(), numbers.end());
-    printVector(numbers);
+    std::vector<int> numbers = {1, 2, 3, 4, 5};
+    for (int n : numbers) {
+        std::cout << n << " ";
+    }
     return 0;
 }
 `,
-  }
+  },
+  {
+    id: 'sql',
+    name: 'SQL',
+    extensions: ['.sql'],
+    defaultFilename: 'query.sql',
+    sampleCode: `-- SQL Syntax Highlighting Demo
+SELECT u.id, u.name, COUNT(o.id) as order_count
+FROM users u
+LEFT JOIN orders o ON u.id = o.user_id
+WHERE u.status = 'active'
+GROUP BY u.id, u.name
+ORDER BY order_count DESC;
+`,
+  },
+  {
+    id: 'markdown',
+    name: 'Markdown',
+    extensions: ['.md', '.markdown'],
+    defaultFilename: 'notes.md',
+    sampleCode: `# Code Review Notes
+
+- Item 1: Checked for edge cases
+- Item 2: Tested memory usage
+`,
+  },
 ];
 
 export function detectLanguageFromFilename(filename: string): string {
   const dotIndex = filename.lastIndexOf('.');
   if (dotIndex === -1) return 'plaintext';
-  
+
   const ext = filename.slice(dotIndex).toLowerCase();
-  const matched = SUPPORTED_LANGUAGES.find(lang => lang.extensions.includes(ext));
-  
+  const matched = SUPPORTED_LANGUAGES.find((lang) => lang.extensions.includes(ext));
+
   return matched ? matched.id : 'plaintext';
 }

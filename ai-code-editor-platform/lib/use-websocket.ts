@@ -16,25 +16,35 @@ export function useReviewWebSocket(onMessage: (msg: WSServerMessage) => void) {
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
+    let isUnmounted = false;
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${protocol}//${window.location.host}/ws/review`;
     const ws = new WebSocket(wsUrl);
 
     ws.onopen = () => {
+      if (isUnmounted) {
+        ws.close();
+        return;
+      }
       console.log('[useReviewWebSocket] Connected to /ws/review');
       setConnected(true);
     };
 
     ws.onclose = () => {
-      console.log('[useReviewWebSocket] Disconnected from /ws/review');
-      setConnected(false);
+      if (!isUnmounted) {
+        console.log('[useReviewWebSocket] Disconnected from /ws/review');
+        setConnected(false);
+      }
     };
 
     ws.onerror = (error) => {
-      console.error('[useReviewWebSocket] WebSocket error:', error);
+      if (!isUnmounted) {
+        console.error('[useReviewWebSocket] WebSocket error:', error);
+      }
     };
 
     ws.onmessage = (event) => {
+      if (isUnmounted) return;
       try {
         const msg: WSServerMessage = JSON.parse(event.data);
         onMessageRef.current(msg);
@@ -46,7 +56,12 @@ export function useReviewWebSocket(onMessage: (msg: WSServerMessage) => void) {
     wsRef.current = ws;
 
     return () => {
-      ws.close();
+      isUnmounted = true;
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.close();
+      } else if (ws.readyState === WebSocket.CONNECTING) {
+        ws.onopen = () => ws.close();
+      }
     };
   }, []);
 
