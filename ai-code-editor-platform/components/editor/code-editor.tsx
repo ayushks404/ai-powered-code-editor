@@ -49,7 +49,19 @@ export default function CodeEditor({
               clearTimeout(debounceRef.current);
             }
 
+            token.onCancellationRequested(() => {
+              if (abortRef.current) {
+                abortRef.current.abort();
+              }
+              resolve({ items: [] });
+            });
+
             debounceRef.current = setTimeout(async () => {
+              if (token.isCancellationRequested) {
+                resolve({ items: [] });
+                return;
+              }
+
               // 2. Cancellation: abort stale in-flight HTTP request
               if (abortRef.current) {
                 abortRef.current.abort();
@@ -72,6 +84,12 @@ export default function CodeEditor({
                 endColumn: model.getLineMaxColumn(totalLines),
               });
 
+              // Don't trigger for completely empty or purely whitespace line at start
+              if (!prefix.trim() && !suffix.trim()) {
+                resolve({ items: [] });
+                return;
+              }
+
               try {
                 // 4. Fetch completion from route handler
                 const response = await fetch('/api/complete', {
@@ -80,6 +98,11 @@ export default function CodeEditor({
                   body: JSON.stringify({ prefix, suffix, language: lang }),
                   signal: abortRef.current.signal,
                 });
+
+                if (!response.ok) {
+                  resolve({ items: [] });
+                  return;
+                }
 
                 const data = await response.json();
 
@@ -112,7 +135,7 @@ export default function CodeEditor({
               } catch {
                 resolve({ items: [] });
               }
-            }, 350);
+            }, 250);
           });
         },
         disposeInlineCompletions: () => {},

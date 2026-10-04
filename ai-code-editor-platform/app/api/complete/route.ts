@@ -36,8 +36,10 @@ export async function POST(request: Request): Promise<Response> {
       });
     }
 
+    const model = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+
     const completionResponse = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
+      model,
       messages: [
         {
           role: 'system',

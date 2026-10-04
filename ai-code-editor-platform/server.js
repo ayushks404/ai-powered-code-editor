@@ -15,14 +15,16 @@ const app = next({ dev, hostname, port });
 const handle = app.getRequestHandler();
 
 app.prepare().then(() => {
-  const server = createServer((req, res) => {
+  const server = createServer(async (req, res) => {
     try {
       const parsedUrl = parse(req.url, true);
-      handle(req, res, parsedUrl);
+      await handle(req, res, parsedUrl);
     } catch (err) {
       console.error('Error handling request:', req.url, err);
-      res.statusCode = 500;
-      res.end('Internal Server Error');
+      if (!res.headersSent) {
+        res.statusCode = 500;
+        res.end('Internal Server Error');
+      }
     }
   });
 
