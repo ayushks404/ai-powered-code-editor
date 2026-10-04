@@ -17,6 +17,36 @@ A full-stack AI-native code editor platform built with Next.js 16, Monaco Editor
 
 ---
 
+## Screenshots & Demo
+
+### 1. Fast Inline AI Code Completion
+*Intelligent ghost-text suggestions appear as you type with low latency (250ms debounce). Press <kbd>Tab</kbd> to accept.*
+
+![Fast Inline AI Code Completion](screenshots/01-inline-completion.png)
+
+---
+
+### 2. Real-Time Streaming AI Code Review
+*Full WebSocket streaming analysis highlighting issues directly on the editor surface with wavy underlines, gutter glyphs, severity badges, and overview ruler heatmap.*
+
+![Real-Time AI Code Review](screenshots/02-realtime-code-review.png)
+
+---
+
+### 3. Side-by-Side Diff View Modal
+*Inspect original code vs. proposed AI fixes side-by-side in Monaco Diff Editor before applying them.*
+
+![Side-by-Side Diff Modal](screenshots/03-diff-viewer-modal.png)
+
+---
+
+### 4. Atomic Fix Application & Live Token Meter
+*One-click fix replaces code cleanly with preserved undo/redo stack (`Ctrl+Z` / `Cmd+Z`) and tracks real-time API token costs.*
+
+![Applied Fixes and Live Token Usage](screenshots/04-applied-fix-and-cost-meter.png)
+
+---
+
 ## Tech Stack
 
 - **Framework**: Next.js 16 (App Router) + React 19
