@@ -29,3 +29,19 @@ export interface TokenUsage {
 }
 
 export type ReviewState = 'idle' | 'analyzing' | 'completed' | 'error';
+
+export interface UsageInfo {
+  inputTokens: number;
+  outputTokens: number;
+  source: 'completion' | 'review';
+}
+
+export type WSClientMessage =
+  | { type: 'review'; code: string; range?: CodeRange; language: string };
+
+export type WSServerMessage =
+  | { type: 'finding'; finding: Finding }
+  | { type: 'usage'; usage: UsageInfo }
+  | { type: 'done' }
+  | { type: 'error'; message: string };
+

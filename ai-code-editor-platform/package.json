@@ -3,9 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "tsx server.js",
+    "dev:next": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "tsx server.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.131.0",
@@ -31,6 +32,7 @@
     "@types/react-dom": "^19",
     "@types/ws": "^8.18.2",
     "tailwindcss": "^4",
+    "tsx": "^4.23.15",
     "typescript": "^5"
   }
 }
