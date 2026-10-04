@@ -3,11 +3,18 @@ import OpenAI from 'openai';
 
 // Lazy initialize OpenAI client if API key is set
 function getOpenAIClient(): OpenAI | null {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey || apiKey.trim() === '' || apiKey === 'YOUR_OPENAI_API_KEY') {
+  const rawKey = process.env.OPENAI_API_KEY || process.env.COMETAPI_KEY || '';
+  const apiKey = rawKey.trim().replace(/^['"]|['"]$/g, '');
+  if (!apiKey || apiKey === 'YOUR_OPENAI_API_KEY') {
     return null;
   }
-  return new OpenAI({ apiKey });
+  const rawBaseURL = process.env.OPENAI_BASE_URL || '';
+  const baseURL = rawBaseURL.trim().replace(/^['"]|['"]$/g, '');
+
+  return new OpenAI({
+    apiKey,
+    baseURL: baseURL && baseURL !== '' ? baseURL : undefined,
+  });
 }
 
 export async function POST(request: Request): Promise<Response> {

@@ -1,3 +1,6 @@
+const { loadEnvConfig } = require('@next/env');
+loadEnvConfig(process.cwd());
+
 const { createServer } = require('http');
 const { parse } = require('url');
 const next = require('next');
@@ -23,10 +26,21 @@ app.prepare().then(() => {
     }
   });
 
-  // Create WebSocket server attached to HTTP server at /ws/review path
-  const wss = new WebSocketServer({ server, path: '/ws/review' });
+  // Use noServer: true so ws doesn't block Next.js's internal HMR WebSockets (/_next/hmr)
+  const wss = new WebSocketServer({ noServer: true });
 
-  wss.on('connection', (ws, req) => {
+  server.on('upgrade', (req, socket, head) => {
+    const { pathname } = parse(req.url || '', true);
+
+    if (pathname === '/ws/review') {
+      wss.handleUpgrade(req, socket, head, (ws) => {
+        wss.emit('connection', ws, req);
+      });
+    }
+    // If it's another WebSocket (e.g. Next.js HMR at /_next/hmr), let Next.js handle it
+  });
+
+  wss.on('connection', (ws) => {
     handleReviewConnection(ws);
   });
 
