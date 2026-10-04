@@ -3,10 +3,13 @@
 import { useRef, useEffect, useCallback } from 'react';
 import Editor, { OnMount } from '@monaco-editor/react';
 import type * as monaco from 'monaco-editor';
+import { Finding } from '@/lib/types';
+import { findingToDecoration } from '@/lib/monaco-utils';
 
 interface CodeEditorProps {
   language: string;
   value: string;
+  findings?: Finding[];
   onChange?: (value: string | undefined) => void;
   onUsage?: (inputTokens: number, outputTokens: number) => void;
   editorRef?: React.MutableRefObject<monaco.editor.IStandaloneCodeEditor | null>;
@@ -15,12 +18,14 @@ interface CodeEditorProps {
 export default function CodeEditor({
   language,
   value,
+  findings = [],
   onChange,
   onUsage,
   editorRef,
 }: CodeEditorProps) {
   const monacoRef = useRef<typeof monaco | null>(null);
   const internalEditorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
+  const decorationsRef = useRef<string[]>([]);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const providerRef = useRef<monaco.IDisposable | null>(null);
@@ -39,7 +44,7 @@ export default function CodeEditor({
           token: monaco.CancellationToken
         ) => {
           return new Promise<monaco.languages.InlineCompletions>((resolve) => {
-            // 1. Debounce: clear previous timer if user is typing
+            // 1. Debounce: clear previous timer if user is actively typing
             if (debounceRef.current) {
               clearTimeout(debounceRef.current);
             }
@@ -144,6 +149,24 @@ export default function CodeEditor({
     };
   }, [language, registerProvider]);
 
+  // Apply / update Monaco decorations safely whenever findings update
+  useEffect(() => {
+    const editor = internalEditorRef.current || editorRef?.current;
+    const monacoInstance = monacoRef.current;
+    if (!editor || !monacoInstance) return;
+
+    // Ensure editor model is loaded and not disposed
+    const model = editor.getModel();
+    if (!model || model.isDisposed()) return;
+
+    try {
+      const decorations = findings.map((f) => findingToDecoration(f, monacoInstance));
+      decorationsRef.current = editor.deltaDecorations(decorationsRef.current, decorations);
+    } catch {
+      // Ignore transient errors during model unmounts
+    }
+  }, [findings, editorRef]);
+
   return (
     <Editor
       height="100%"
@@ -154,6 +177,7 @@ export default function CodeEditor({
       theme="vs-dark"
       options={{
         fontSize: 14,
+        glyphMargin: true,
         minimap: { enabled: true },
         lineNumbers: 'on',
         scrollBeyondLastLine: false,
