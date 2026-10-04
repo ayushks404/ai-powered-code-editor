@@ -1,8 +1,10 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useState } from 'react';
 import dynamic from 'next/dynamic';
 import { SUPPORTED_LANGUAGES, detectLanguageFromFilename } from '@/lib/languages';
+import { Finding, ReviewState, TokenUsage } from '@/lib/types';
+import AIPanel from '@/components/panel/ai-panel';
 
 const CodeEditor = dynamic(() => import('@/components/CodeEditor'), {
   ssr: false,
@@ -19,6 +21,18 @@ export default function EditorClient() {
   const [isManualOverride, setIsManualOverride] = useState(false);
   const [code, setCode] = useState(SUPPORTED_LANGUAGES[0].sampleCode);
 
+  // AIPanel States
+  const [isPanelCollapsed, setIsPanelCollapsed] = useState(false);
+  const [findings, setFindings] = useState<Finding[]>([]);
+  const [reviewState, setReviewState] = useState<ReviewState>('idle');
+  const [tokenUsage, setTokenUsage] = useState<TokenUsage>({
+    inputTokens: 0,
+    outputTokens: 0,
+    totalCost: 0,
+    completionCalls: 0,
+    reviewCalls: 0,
+  });
+
   const activeLangOption = SUPPORTED_LANGUAGES.find((l) => l.id === selectedLanguage) || SUPPORTED_LANGUAGES[0];
 
   const handleFilenameChange = (newFilename: string) => {
@@ -27,7 +41,6 @@ export default function EditorClient() {
     if (detected !== 'plaintext') {
       setSelectedLanguage(detected);
       setIsManualOverride(false);
-      // If code was untouched or user switched files, load sample for new language
       const langConfig = SUPPORTED_LANGUAGES.find((l) => l.id === detected);
       if (langConfig) {
         setCode(langConfig.sampleCode);
@@ -40,7 +53,6 @@ export default function EditorClient() {
     setIsManualOverride(true);
     const langConfig = SUPPORTED_LANGUAGES.find((l) => l.id === langId);
     if (langConfig) {
-      // Update filename extension if filename exists
       const dotIdx = filename.lastIndexOf('.');
       if (dotIdx !== -1) {
         const baseName = filename.slice(0, dotIdx);
@@ -58,9 +70,17 @@ export default function EditorClient() {
     }
   };
 
+  const handleRunReview = () => {
+    setReviewState('analyzing');
+    // M1 step: Simulate trigger placeholder state - M4 will connect WebSocket stream
+    setTimeout(() => {
+      setReviewState('idle');
+    }, 1200);
+  };
+
   return (
     <div className="flex flex-col h-full bg-[#1e1e1e] text-zinc-200 font-sans select-none">
-      {/* Top Toolbar */}
+      {/* Top Header Toolbar */}
       <header className="flex flex-wrap items-center justify-between gap-3 px-4 py-2 bg-[#252526] border-b border-[#3c3c3c] text-xs shrink-0">
         {/* Left: Window Controls & Filename Input */}
         <div className="flex items-center gap-3">
@@ -89,9 +109,8 @@ export default function EditorClient() {
           </span>
         </div>
 
-        {/* Right: Quick Language Switches & Selector */}
+        {/* Right: Quick Language Switches, Selector & Panel Toggle */}
         <div className="flex items-center gap-2">
-          {/* Quick preset pills */}
           <div className="hidden sm:flex items-center gap-1 bg-[#1e1e1e] p-1 rounded border border-[#3c3c3c]">
             {SUPPORTED_LANGUAGES.slice(0, 4).map((lang) => (
               <button
@@ -108,7 +127,6 @@ export default function EditorClient() {
             ))}
           </div>
 
-          {/* Language dropdown */}
           <select
             value={selectedLanguage}
             onChange={(e) => handleLanguageSelect(e.target.value)}
@@ -121,7 +139,6 @@ export default function EditorClient() {
             ))}
           </select>
 
-          {/* Reset sample code */}
           <button
             onClick={handleLoadSample}
             className="px-2.5 py-1 bg-[#323233] hover:bg-[#3c3c3c] text-zinc-300 border border-[#454545] rounded transition-colors text-xs flex items-center gap-1.5"
@@ -132,20 +149,48 @@ export default function EditorClient() {
             </svg>
             Sample
           </button>
+
+          <button
+            onClick={() => setIsPanelCollapsed(!isPanelCollapsed)}
+            className={`px-2.5 py-1 border rounded transition-colors text-xs flex items-center gap-1.5 ${
+              !isPanelCollapsed
+                ? 'bg-blue-950/80 text-blue-300 border-blue-800'
+                : 'bg-[#323233] text-zinc-300 border-[#454545] hover:bg-[#3c3c3c]'
+            }`}
+            title="Toggle AI Side Panel"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+            <span>{isPanelCollapsed ? 'Show Panel' : 'Panel'}</span>
+          </button>
         </div>
       </header>
 
-      {/* Editor Surface */}
-      <div className="flex-1 min-h-0 relative">
-        <CodeEditor
-          language={selectedLanguage}
-          value={code}
-          onChange={(val) => setCode(val ?? '')}
+      {/* Main Two-Pane Container */}
+      <div className="flex-1 flex min-h-0 overflow-hidden relative">
+        {/* Left Pane: Monaco Editor */}
+        <div className="flex-1 min-w-0 h-full relative">
+          <CodeEditor
+            language={selectedLanguage}
+            value={code}
+            onChange={(val) => setCode(val ?? '')}
+          />
+        </div>
+
+        {/* Right Pane: AI Panel (Review & Usage tabs) */}
+        <AIPanel
+          findings={findings}
+          reviewState={reviewState}
+          tokenUsage={tokenUsage}
+          onRunReview={handleRunReview}
+          isCollapsed={isPanelCollapsed}
+          onToggleCollapse={() => setIsPanelCollapsed(!isPanelCollapsed)}
         />
       </div>
 
       {/* Footer / Status Bar */}
-      <footer className="flex items-center justify-between px-3 h-6 bg-[#007acc] text-white text-[11px] font-mono shrink-0">
+      <footer className="flex items-center justify-between px-3 h-6 bg-[#007acc] text-white text-[11px] font-mono shrink-0 select-none">
         <div className="flex items-center gap-4">
           <span className="flex items-center gap-1">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
