@@ -1,6 +1,7 @@
 'use client';
 
 import { Finding, ReviewState } from '@/lib/types';
+import FindingItem from './finding-item';
 
 interface ReviewPanelProps {
   findings: Finding[];
@@ -83,56 +84,14 @@ export default function ReviewPanel({
           </div>
         ) : (
           <div className="flex flex-col gap-3">
-            {findings.map((finding) => {
-              const severityColor =
-                finding.severity === 'error'
-                  ? 'bg-rose-950/70 text-rose-300 border-rose-800/60'
-                  : finding.severity === 'warning'
-                  ? 'bg-amber-950/70 text-amber-300 border-amber-800/60'
-                  : 'bg-blue-950/70 text-blue-300 border-blue-800/60';
-
-              return (
-                <div
-                  key={finding.id}
-                  onClick={() => onSelectFinding?.(finding)}
-                  className="flex flex-col gap-2 p-3 bg-[#252526] border border-[#3c3c3c] hover:border-zinc-500 rounded-md transition-all cursor-pointer group"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className={`px-1.5 py-0.5 rounded text-[10px] uppercase font-mono font-medium border ${severityColor}`}>
-                      {finding.severity}
-                    </span>
-                    <span className="text-zinc-400 font-mono text-[11px]">
-                      Lines {finding.range.startLineNumber}-{finding.range.endLineNumber}
-                    </span>
-                  </div>
-
-                  <h4 className="font-medium text-zinc-200 text-xs group-hover:text-blue-400 transition-colors">
-                    {finding.title}
-                  </h4>
-
-                  <p className="text-zinc-400 text-[11px] leading-normal">
-                    {finding.description}
-                  </p>
-
-                  {finding.suggestedFix && (
-                    <div className="flex items-center justify-end pt-1 border-t border-[#333]">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onViewFix?.(finding);
-                        }}
-                        className="px-2 py-1 rounded bg-[#323233] hover:bg-[#3c3c3c] text-blue-400 text-[11px] font-medium border border-[#444] transition-colors flex items-center gap-1"
-                      >
-                        <span>View Fix</span>
-                        <svg className="w-3 h-3 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                        </svg>
-                      </button>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+            {findings.map((finding) => (
+              <FindingItem
+                key={finding.id}
+                finding={finding}
+                onSelect={onSelectFinding}
+                onViewFix={onViewFix}
+              />
+            ))}
           </div>
         )}
       </div>
