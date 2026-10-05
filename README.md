@@ -70,13 +70,13 @@ A full-stack AI-native code editor platform built with Next.js 16, Monaco Editor
 
 ```bash
 git clone https://github.com/ayushks404/ai-powered-code-editor.git
-cd ai-powered-code-editor/ai-code-editor-platform
+cd ai-powered-code-editor
 npm install
 ```
 
 ### 3. Configure Environment Variables
 
-Create a `.env.local` file in the root of `ai-code-editor-platform`:
+Create a `.env.local` file in the root of the project:
 
 ```bash
 touch .env.local
