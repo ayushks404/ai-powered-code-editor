@@ -9,9 +9,11 @@ A full-stack AI-native code editor platform built with Next.js 16, Monaco Editor
 - **Monaco Editor Experience**: Full-featured code editor with syntax highlighting, gutter glyphs, overview ruler heatmaps, and dark theme.
 - **Multi-Language & File Upload**: Out-of-the-box support for TypeScript, JavaScript, Python, Go, Rust, Java, C++, HTML, CSS, JSON, SQL, Markdown, Shell, and more with instant file opening.
 - **Fast Inline AI Completions**: Intelligent ghost-text suggestions powered by OpenAI / CometAPI with 250ms debouncing, request cancellation, and single-keystroke tab acceptance.
+- **Targeted Code Selection & Review**: Select any specific line or block of code and trigger focused AI analysis with automatic snippet-to-document coordinate translation.
 - **Streaming Code Review Engine**: Real-time code analysis powered by Claude (`claude-opus-5-5` via LLMsRelay or native Anthropic) over persistent WebSockets (`/ws/review`).
 - **Incremental JSONL Parser**: Parses streaming AI output line-by-line without buffering delays, accurately mapping snippet lines to root document coordinates.
-- **In-Editor Annotations**: Real-time Monaco `deltaDecorations` with severity-coded wavy underlines (error, warning, info), gutter icons, and detailed hover tooltips.
+- **Line-Mapped In-Editor Annotations**: Real-time Monaco `deltaDecorations` with severity-coded wavy underlines (error, warning, info), gutter icons, and detailed hover tooltips.
+- **Click-to-Scroll Issue Navigation**: Clicking any issue in the review panel automatically scrolls Monaco down to the exact line with the issue and highlights it in view.
 - **Side-by-Side Diff & One-Click Fixes**: Compare proposed changes side-by-side in Monaco Diff Editor and apply fixes atomically via `editor.executeEdits()` with full undo/redo history preservation.
 - **Token & Cost Meter**: Live tracking of prompt tokens, completion tokens, and real-time USD session costs for transparency.
 
@@ -26,21 +28,40 @@ A full-stack AI-native code editor platform built with Next.js 16, Monaco Editor
 
 ---
 
-### 2. Real-Time Streaming AI Code Review
-*Full WebSocket streaming analysis highlighting issues directly on the editor surface with wavy underlines, gutter glyphs, severity badges, and overview ruler heatmap.*
+### 2. Selective Line Review & Real-Time Analysis Flow
+
+#### A. Select Any Code Lines & Click Review
+*Highlight any function or specific lines of code in the editor, and click **"Run AI Review"** in the review panel to initiate targeted analysis.*
+
+![Select Code Lines and Run AI Review](screenshots/select-lines-code-review.png)
+
+#### B. Real-Time Streaming & Analysis
+*Persistent WebSocket connection (`/ws/review`) streams the code to Claude and begins real-time incremental analysis with an active analyzing indicator.*
+
+![Analyzing Code in Real Time](screenshots/analyzing-code-review.png)
+
+#### C. Exact Line-Mapped Issues & In-Editor Gutter Markers
+*Findings stream into the panel with exact line numbers (e.g., `Lines 85-85`, `Lines 88-88`) and severity badges. Gutter glyphs and underlines are mapped precisely to the selected lines.*
+
+![Line Mapped Issues and Annotations](screenshots/line-mapped-issues.png)
+
+---
+
+### 3. Click-to-Scroll Issue Navigation & Editor Annotations
+*Clicking any issue in the review panel smoothly scrolls Monaco directly to the exact offending line and centers it in view with visual decorators and hover tooltips.*
 
 ![Real-Time AI Code Review](screenshots/02-realtime-code-review.png)
 
 ---
 
-### 3. Side-by-Side Diff View Modal
+### 4. Side-by-Side Diff View Modal
 *Inspect original code vs. proposed AI fixes side-by-side in Monaco Diff Editor before applying them.*
 
 ![Side-by-Side Diff Modal](screenshots/03-diff-viewer-modal.png)
 
 ---
 
-### 4. Atomic Fix Application & Live Token Meter
+### 5. Atomic Fix Application & Live Token Meter
 *One-click fix replaces code cleanly with preserved undo/redo stack (`Ctrl+Z` / `Cmd+Z`) and tracks real-time API token costs.*
 
 ![Applied Fixes and Live Token Usage](screenshots/04-applied-fix-and-cost-meter.png)
@@ -145,14 +166,15 @@ npm start
    - Type naturally in the editor. After a 250ms pause, AI ghost text appears.
    - Press <kbd>Tab</kbd> to accept the suggestion.
 
-3. **Trigger AI Code Review**:
-   - Click the **"Review Code"** button in the header.
-   - The review engine streams results incrementally.
-   - Findings appear live in the right panel and highlight corresponding lines directly inside the editor.
+3. **Select Lines & Trigger AI Review**:
+   - Highlight any specific function, block, or lines of code in the editor (or leave unselected to analyze the active file).
+   - Click the **"Run AI Review"** button in the review panel.
+   - The button shows *Analyzing...* with an active spinner as findings stream incrementally over the `/ws/review` WebSocket.
+   - Issues are accurately mapped with exact line coordinates (e.g. `Lines 85-85`, `Lines 88-88`), severity badges (Warning, Info, Error), and gutter glyph markers.
 
-4. **Review & Apply Fixes**:
-   - Click any finding in the panel to jump to the affected line in Monaco.
-   - Click **"View Fix"** to inspect side-by-side original vs. suggested code.
+4. **Click-to-Scroll Navigation & Apply Fixes**:
+   - **Click any issue card** in the review panel: Monaco automatically scrolls down and centers the view directly on the exact line with the issue.
+   - Click **"View Fix"** to inspect side-by-side original vs. suggested code in the Monaco Diff Editor.
    - Click **"Apply Fix"** to replace the code cleanly with undo history intact (<kbd>Ctrl+Z</kbd> / <kbd>Cmd+Z</kbd>).
 
 ---
